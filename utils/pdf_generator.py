@@ -3,6 +3,7 @@ PDF generator utility for converting text/markdown to PDF.
 """
 import os
 import tempfile
+import re
 from fpdf import FPDF
 from typing import Dict, List, Any, Optional
 
@@ -12,14 +13,12 @@ class PDFGenerator:
     """
     def __init__(self):
         """Initialize the PDF generator."""
+        # Create PDF with Unicode support
         self.pdf = FPDF()
         self.pdf.set_auto_page_break(auto=True, margin=15)
-        
-        # Add a Unicode font (DejaVu) which has better character support
         self.pdf.add_page()
         
-        # Use a font with better Unicode support
-        # Default to built-in fonts which should work across platforms
+        # Use a standard font
         self.pdf.set_font("Arial", size=12)
         
         # Define font sizes for different heading levels
@@ -31,6 +30,56 @@ class PDFGenerator:
             5: 12,
             6: 12
         }
+        
+        # Define character replacements for problematic symbols
+        self.char_replacements = {
+            '•': '-',  # Replace bullet points with hyphens
+            '–': '-',  # Replace en dash with hyphen
+            '—': '-',  # Replace em dash with hyphen
+            ''': "'",  # Replace smart quotes
+            ''': "'",
+            '"': '"',
+            '"': '"',
+            '…': '...',  # Replace ellipsis
+            '≤': '<=',
+            '≥': '>=',
+            '©': '(c)',
+            '®': '(R)',
+            '™': '(TM)',
+            '°': ' degrees',
+            '±': '+/-',
+            '×': 'x',
+            '÷': '/',
+            '½': '1/2',
+            '¼': '1/4',
+            '¾': '3/4',
+            # Add more replacements as needed
+        }
+    
+    def sanitize_text(self, text: str) -> str:
+        """
+        Sanitize text by replacing problematic characters.
+        
+        Args:
+            text (str): Text to sanitize
+            
+        Returns:
+            str: Sanitized text
+        """
+        # Replace known problematic characters
+        for char, replacement in self.char_replacements.items():
+            text = text.replace(char, replacement)
+        
+        # Replace any remaining non-ASCII characters with their closest ASCII equivalent or a placeholder
+        sanitized_text = ''
+        for char in text:
+            if ord(char) < 128:  # ASCII characters
+                sanitized_text += char
+            else:
+                # Try to find a close ASCII equivalent or use a placeholder
+                sanitized_text += self.char_replacements.get(char, ' ')
+        
+        return sanitized_text
     
     def add_heading(self, text: str, level: int = 1):
         """
@@ -45,12 +94,15 @@ class PDFGenerator:
         self.pdf.set_font("Arial", "B", size=size)
         self.pdf.ln(10)
         
-        # Handle potential encoding issues
+        # Sanitize text to handle special characters
+        safe_text = self.sanitize_text(text)
+        
         try:
-            self.pdf.cell(0, 10, text, ln=True)
-        except UnicodeEncodeError:
-            # Fall back to a simpler representation if encoding fails
+            self.pdf.cell(0, 10, safe_text, ln=True)
+        except Exception as e:
+            # Fall back to a simpler representation if any error occurs
             self.pdf.cell(0, 10, f"Heading level {level}", ln=True)
+            print(f"Error rendering heading: {e}")
             
         self.pdf.ln(5)
         # Reset to normal font
@@ -65,12 +117,15 @@ class PDFGenerator:
         """
         self.pdf.set_font("Arial", size=12)
         
-        # Handle potential encoding issues
+        # Sanitize text to handle special characters
+        safe_text = self.sanitize_text(text)
+        
         try:
-            self.pdf.multi_cell(0, 10, text)
-        except UnicodeEncodeError:
-            # Fall back to a simpler representation if encoding fails
+            self.pdf.multi_cell(0, 10, safe_text)
+        except Exception as e:
+            # Fall back to a simpler representation if any error occurs
             self.pdf.multi_cell(0, 10, "[Text contains unsupported characters]")
+            print(f"Error rendering paragraph: {e}")
             
         self.pdf.ln(5)
     
@@ -83,14 +138,18 @@ class PDFGenerator:
         """
         self.pdf.set_font("Arial", size=12)
         for item in items:
-            self.pdf.cell(10, 10, "•", ln=0)
+            # Use a simple hyphen instead of bullet point
+            self.pdf.cell(10, 10, "-", ln=0)
             
-            # Handle potential encoding issues
+            # Sanitize text to handle special characters
+            safe_item = self.sanitize_text(item)
+            
             try:
-                self.pdf.multi_cell(0, 10, item)
-            except UnicodeEncodeError:
-                # Fall back to a simpler representation if encoding fails
+                self.pdf.multi_cell(0, 10, safe_item)
+            except Exception as e:
+                # Fall back to a simpler representation if any error occurs
                 self.pdf.multi_cell(0, 10, "[Item contains unsupported characters]")
+                print(f"Error rendering list item: {e}")
     
     def add_content_from_structure(self, structure: Dict[str, Any]):
         """
@@ -118,12 +177,15 @@ class PDFGenerator:
         Args:
             text (str): Text to add
         """
-        # Handle potential encoding issues
+        # Sanitize text to handle special characters
+        safe_text = self.sanitize_text(text)
+        
         try:
-            self.pdf.multi_cell(0, 10, text)
-        except UnicodeEncodeError:
-            # Fall back to a simpler representation if encoding fails
+            self.pdf.multi_cell(0, 10, safe_text)
+        except Exception as e:
+            # Fall back to a simpler representation if any error occurs
             self.pdf.multi_cell(0, 10, "[Text contains unsupported characters]")
+            print(f"Error rendering text: {e}")
     
     def generate_pdf(self, output_path: Optional[str] = None) -> str:
         """
@@ -140,5 +202,16 @@ class PDFGenerator:
             fd, output_path = tempfile.mkstemp(suffix='.pdf')
             os.close(fd)
         
-        self.pdf.output(output_path)
+        try:
+            self.pdf.output(output_path)
+        except Exception as e:
+            print(f"Error generating PDF: {e}")
+            # If there's an error, create a simple error PDF
+            error_pdf = FPDF()
+            error_pdf.add_page()
+            error_pdf.set_font("Arial", size=12)
+            error_pdf.cell(0, 10, "Error generating PDF with the provided content.", ln=True)
+            error_pdf.cell(0, 10, "The content may contain unsupported characters.", ln=True)
+            error_pdf.output(output_path)
+            
         return output_path 
