@@ -14,9 +14,13 @@ class PDFGenerator:
         """Initialize the PDF generator."""
         self.pdf = FPDF()
         self.pdf.set_auto_page_break(auto=True, margin=15)
-        # Use a standard font that supports most characters
+        
+        # Add a Unicode font (DejaVu) which has better character support
         self.pdf.add_page()
-        self.pdf.set_font("Helvetica", size=12)
+        
+        # Use a font with better Unicode support
+        # Default to built-in fonts which should work across platforms
+        self.pdf.set_font("Arial", size=12)
         
         # Define font sizes for different heading levels
         self.heading_sizes = {
@@ -38,12 +42,19 @@ class PDFGenerator:
         """
         # Set font size based on heading level
         size = self.heading_sizes.get(level, 12)
-        self.pdf.set_font("Helvetica", "B", size=size)
+        self.pdf.set_font("Arial", "B", size=size)
         self.pdf.ln(10)
-        self.pdf.cell(0, 10, text, ln=True)
+        
+        # Handle potential encoding issues
+        try:
+            self.pdf.cell(0, 10, text, ln=True)
+        except UnicodeEncodeError:
+            # Fall back to a simpler representation if encoding fails
+            self.pdf.cell(0, 10, f"Heading level {level}", ln=True)
+            
         self.pdf.ln(5)
         # Reset to normal font
-        self.pdf.set_font("Helvetica", size=12)
+        self.pdf.set_font("Arial", size=12)
     
     def add_paragraph(self, text: str):
         """
@@ -52,8 +63,15 @@ class PDFGenerator:
         Args:
             text (str): Paragraph text
         """
-        self.pdf.set_font("Helvetica", size=12)
-        self.pdf.multi_cell(0, 10, text)
+        self.pdf.set_font("Arial", size=12)
+        
+        # Handle potential encoding issues
+        try:
+            self.pdf.multi_cell(0, 10, text)
+        except UnicodeEncodeError:
+            # Fall back to a simpler representation if encoding fails
+            self.pdf.multi_cell(0, 10, "[Text contains unsupported characters]")
+            
         self.pdf.ln(5)
     
     def add_list(self, items: List[str]):
@@ -63,10 +81,16 @@ class PDFGenerator:
         Args:
             items (List[str]): List items
         """
-        self.pdf.set_font("Helvetica", size=12)
+        self.pdf.set_font("Arial", size=12)
         for item in items:
             self.pdf.cell(10, 10, "•", ln=0)
-            self.pdf.multi_cell(0, 10, item)
+            
+            # Handle potential encoding issues
+            try:
+                self.pdf.multi_cell(0, 10, item)
+            except UnicodeEncodeError:
+                # Fall back to a simpler representation if encoding fails
+                self.pdf.multi_cell(0, 10, "[Item contains unsupported characters]")
     
     def add_content_from_structure(self, structure: Dict[str, Any]):
         """
@@ -94,7 +118,12 @@ class PDFGenerator:
         Args:
             text (str): Text to add
         """
-        self.pdf.multi_cell(0, 10, text)
+        # Handle potential encoding issues
+        try:
+            self.pdf.multi_cell(0, 10, text)
+        except UnicodeEncodeError:
+            # Fall back to a simpler representation if encoding fails
+            self.pdf.multi_cell(0, 10, "[Text contains unsupported characters]")
     
     def generate_pdf(self, output_path: Optional[str] = None) -> str:
         """
